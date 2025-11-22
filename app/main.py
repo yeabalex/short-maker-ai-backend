@@ -2,13 +2,15 @@ import os
 import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
 from redis import Redis
 from rq import Queue
 from rq.job import Job
 from dotenv import load_dotenv
 from pathlib import Path
-from tasks import download_video, download_subtitle, generate_short_subtitles, process_downloaded_video
+from app.services.downloads import download_video, download_subtitle
+from app.services.ai import generate_short_subtitles
+from app.services.processing import process_downloaded_video
+from app.schemas import SubtitleRequest, DownloadRequest, ShortSubtitleRequest
 
 load_dotenv()
 
@@ -21,24 +23,10 @@ queue = Queue("video_queue", connection=redis_conn)
 app = FastAPI()
 
 # Define a consistent base directory for all files
-BASE_DIR = Path(__file__).parent.resolve()
+# app/main.py -> parent is app -> parent is root
+BASE_DIR = Path(__file__).parent.parent.resolve()
 DOWNLOADS_DIR = BASE_DIR / "downloads"
 DOWNLOADS_DIR.mkdir(exist_ok=True)
-
-# -----------------------
-# Pydantic Models
-# -----------------------
-class SubtitleRequest(BaseModel):
-    url: str
-    title: str
-    lang: str = "en"
-
-class DownloadRequest(BaseModel):
-    url: str
-    title: str
-
-class ShortSubtitleRequest(BaseModel):
-    subtitle_file: str
 
 # -----------------------
 # Endpoints
