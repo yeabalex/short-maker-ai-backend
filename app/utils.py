@@ -127,3 +127,101 @@ def convert_vtt_to_srt(vtt_file: str) -> str:
             srt.write("\n")
     
     return srt_file
+
+def generate_karaoke_ass_file(timestamps: List[Dict[str, Any]], output_path: str, video_width: int = 1080, video_height: int = 1920) -> str:
+    """
+    Generate an ASS subtitle file with karaoke-style word highlighting.
+    Shows 3 words at a time (sliding window) for viral TikTok/YouTube Shorts style.
+    
+    Args:
+        timestamps: List of timestamp dictionaries with 'words' array containing word-level timing
+        output_path: Path where the ASS file should be saved
+        video_width: Width of the video (default 1080 for vertical videos)
+        video_height: Height of the video (default 1920 for vertical videos)
+    
+    Returns:
+        Path to the generated ASS file
+    """
+    
+    # ASS file header with styling
+    ass_content = f"""[Script Info]
+Title: Karaoke Subtitles
+ScriptType: v4.00+
+WrapStyle: 0
+PlayResX: {video_width}
+PlayResY: {video_height}
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,70,&H00FFFFFF,&H00FFFF00,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,2,5,10,10,0,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    
+    def format_time(seconds: float) -> str:
+        """Convert seconds to ASS timestamp format (H:MM:SS.CS)"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        centisecs = int((seconds % 1) * 100)
+        return f"{hours}:{minutes:02d}:{secs:02d}.{centisecs:02d}"
+    
+    # Generate dialogue lines with sliding window karaoke effects
+    for clip in timestamps:
+        if 'words' not in clip or not clip['words']:
+            # Fallback: if no word-level timing, show entire text
+            start_time = format_time(clip['start_sec'])
+            end_time = format_time(clip['end_sec'])
+            text = clip.get('text', '').replace('\n', ' ')
+            ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{text}\n"
+            continue
+        
+        words = clip['words']
+        
+        # Create sliding window of 3 words at a time
+        window_size = 3
+        
+        i = 0
+        while i < len(words):
+            # Get the current window of words
+            window_words = words[i:i+window_size]
+            
+            if not window_words:
+                break
+            
+            # Calculate timing for this window
+            window_start = window_words[0].get('start', clip['start_sec'])
+            window_end = window_words[-1].get('end', clip['end_sec'])
+            
+            # Build karaoke text for this window
+            karaoke_text = ""
+            for j, word_data in enumerate(window_words):
+                word = word_data.get('word', '')
+                word_start = word_data.get('start', window_start)
+                word_end = word_data.get('end', window_end)
+                
+                # Calculate duration in centiseconds for karaoke effect
+                duration_cs = int((word_end - word_start) * 100)
+                
+                # Add karaoke timing tag
+                karaoke_text += f"{{\\k{duration_cs}}}{word}"
+                
+                # Add space between words (except for last word in window)
+                if j < len(window_words) - 1:
+                    karaoke_text += " "
+            
+            # Add the dialogue line for this window
+            start_time = format_time(window_start)
+            end_time = format_time(window_end)
+            ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{karaoke_text}\n"
+            
+            # Move to next window (non-overlapping to prevent duplication)
+            i += window_size
+    
+    # Write the ASS file
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(ass_content)
+    
+    return output_path

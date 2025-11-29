@@ -5,11 +5,11 @@ import subprocess
 import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from app.utils import extract_timestamps_from_srt, parse_json_safely
+from app.utils import extract_timestamps_from_srt, parse_json_safely, generate_karaoke_ass_file
 
 def cut_and_merge(input_video: str, timestamps: list, output_name: str = "final_output.mp4") -> Optional[str]:
     """
-    Cut and merge video segments based on timestamps with smooth transitions.
+    Cut and merge video segments based on timestamps with smooth transitions and karaoke-style subtitles.
     Returns the path to the output video if successful, else None.
     """
     if not os.path.exists(input_video):
@@ -26,11 +26,17 @@ def cut_and_merge(input_video: str, timestamps: list, output_name: str = "final_
         
     clips_dir = work_dir / "clips"
     clips_dir.mkdir(exist_ok=True)
+    
+    # Generate ASS subtitle file for karaoke-style captions
+    ass_file = work_dir / "subtitles.ass"
+    print("Generating karaoke-style subtitles...")
+    generate_karaoke_ass_file(timestamps, str(ass_file), video_width=1080, video_height=1920)
+    print(f"Generated ASS subtitle file: {ass_file}")
         
     clip_names = []
     durations = []
         
-    # 1. Cut and Crop Clips
+    # 1. Cut, Crop, and Add Subtitles to Clips
     for i, ts in enumerate(timestamps, start=1):
         clip_name = f"clip_{i}.mp4"
         clip_path = clips_dir / clip_name
@@ -38,6 +44,10 @@ def cut_and_merge(input_video: str, timestamps: list, output_name: str = "final_
         
         duration = ts["end_sec"] - ts["start_sec"]
         durations.append(duration)
+        
+        # Calculate the subtitle offset for this specific clip
+        # Since we're cutting from start_sec to end_sec, we need to adjust subtitle timing
+        subtitle_offset = ts["start_sec"]
 
         subprocess.run([
             "ffmpeg",
@@ -45,8 +55,9 @@ def cut_and_merge(input_video: str, timestamps: list, output_name: str = "final_
             "-i", input_video,
             "-ss", str(ts["start_sec"]),
             "-to", str(ts["end_sec"]),
-            "-vf", "crop=trunc(ih*9/16/2)*2:ih",
+            "-vf", f"crop=trunc(ih*9/16/2)*2:ih,ass={str(ass_file).replace('\\', '/')}:fontsdir=/Windows/Fonts",
             "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
             "-crf", "18",
             "-preset", "slow",
             "-c:a", "aac",
@@ -69,8 +80,8 @@ def cut_and_merge(input_video: str, timestamps: list, output_name: str = "final_
     else:
         # Calculate safe transition duration
         min_dur = min(durations)
-        # Target 0.5s, but ensure we don't consume more than half a clip
-        trans_dur = min(0.5, min_dur / 2.1)
+        # Target 0.75s, but ensure we don't consume more than half a clip
+        trans_dur = min(0.75, min_dur / 2.1)
         
         inputs = []
         for name in clip_names:
@@ -110,10 +121,12 @@ def cut_and_merge(input_video: str, timestamps: list, output_name: str = "final_
             "-map", "[outv]",
             "-map", "[outa]",
             "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
             "-crf", "18",
             "-preset", "slow",
             "-c:a", "aac",
             "-b:a", "192k",
+            "-movflags", "+faststart",
             str(output_path)
         ]
         
@@ -172,6 +185,11 @@ def process_downloaded_video():
                 return None
                     
         print(f"Loaded {len(timestamps)} timestamps from short subtitles")
+        
+        # Trim start and end to avoid "dead air" or unwanted transitions as requested
+        # "not take the last seconds of the last clip and the first secons of the comming clip"
+        # Timestamps are used as-is, without any addition or subtraction
+        pass
     except Exception as e:
         print(f"Error reading short subtitles file {json_path}: {e}")
         return None

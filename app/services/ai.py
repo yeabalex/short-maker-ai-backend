@@ -36,33 +36,94 @@ def generate_short_subtitles(subtitle_file: str) -> str:
     with open(subtitle_file, 'r', encoding='utf-8') as f:
         subtitle_content = f.read()
     
-    # Step 2: Generate short/high-impact subtitles
+    # Step 2: Generate ONE continuous segment as a SINGLE JSON object with word-level timestamps
     # Create the prompt as a single string
-    prompt = """You are a precision-focused AI video editor assistant.
+    prompt = """You are a master video editor and storyteller. Your goal is to extract a single, viral-worthy short segment (30-60 seconds) from a longer video's subtitles.
 
-Task: Create a viral YouTube Short (< 60s) from this subtitle file.
+🎯 CORE OBJECTIVE: FIND A COMPLETE NARRATIVE ARC
+You must find a segment that stands alone as a complete story or concept. It must have a clear beginning, a middle, and a definitive end.
 
-CRITICAL INSTRUCTION ON TIMINGS:
-You must be EXTREMELY ACCURATE with timestamps. 
-1.  **REVIEW** every selected line against the original subtitle file.
-2.  **COPY** the exact `start_sec` and `end_sec` from the original file for the selected text.
-3.  **DO NOT** approximate or guess. If a sentence starts at 00:00:05.123, your output MUST be 5.123.
-4.  Ensure there is NO OVERLAP between clips unless they are continuous in the original video.
+🚫 STRICT PROHIBITIONS (DO NOT IGNORE):
+1.  **NO MID-THOUGHT STARTS**:
+    -   NEVER start with conjunctions: "and", "but", "so", "because", "or".
+    -   NEVER start with dependent clauses: "which is why...", "that means...".
+    -   NEVER start with pronouns (he, she, it, they) unless the antecedent is immediately clear within the first sentence.
+    -   NEVER start in the middle of a sentence.
 
-Content Guidelines:
-- Select the most shocking, controversial, funny, or exciting parts.
-- Create a COHERENT STORY. The clips must flow naturally.
-- Maintain natural speech patterns.
+2.  **NO ABRUPT ENDINGS**:
+    -   NEVER end in the middle of a sentence.
+    -   NEVER end while an idea is still being explained.
+    -   The segment MUST end on a period, question mark, or exclamation point that concludes the thought.
 
-Output Format:
-- Return ONLY a JSON array.
-- Each object must have:
-   - "start_sec": exact start time in seconds (number, e.g., 12.345)
-   - "end_sec": exact end time in seconds (number, e.g., 15.678)
-   - "text": exact spoken text (string)
+✅ SELECTION CRITERIA:
+1.  **The Hook (0-5s)**: The first sentence must be engaging and establish the topic immediately. It should grab the viewer's attention.
+2.  **The Body**: The middle section should develop the idea or tell the story.
+3.  **The Resolution**: The final sentence must wrap up the specific point or story. It should feel like a satisfying conclusion.
+4.  **Context Independence**: The viewer must understand what is happening without seeing the rest of the video.
 
-Output the JSON array now:"""
+📝 EXAMPLES:
 
+❌ BAD SELECTION (Do NOT do this):
+Start: "and that's why he went to the store." (Who is he? Why does it start with 'and'?)
+End: "so he bought the..." (Cut off mid-sentence)
+
+✅ GOOD SELECTION:
+Start: "Steve Jobs had a unique way of negotiating." (Clear subject, interesting hook)
+Body: [Details about the negotiation]
+End: "And that is how he got the deal signed." (Conclusive ending)
+
+⚠️ TIMING ACCURACY IS CRITICAL:
+-   You MUST copy the EXACT timestamps from the source file.
+-   Do not approximate.
+-   Verify that the text you selected matches the timestamps exactly.
+
+🚨 TIMING RULES (FOLLOW EXACTLY):
+
+1. **FIND THE SEGMENT FIRST**:
+   - Read through the ENTIRE subtitle file
+   - Identify the most engaging 30-60 second continuous portion that follows the NARRATIVE ARC rules above.
+   - Note the EXACT start time of the first line
+   - Note the EXACT end time of the last line
+
+2. **COPY EXACT TIMESTAMPS**:
+   - Look at the subtitle file timestamps (format: HH:MM:SS,MMM)
+   - Convert to seconds PRECISELY
+   - Example: 00:00:52.960 = 52.960 seconds (NOT 52.96, NOT 53.0)
+   - Example: 00:01:23.680 = 83.680 seconds (NOT 83.68, NOT 84.0)
+
+3. **VERIFY YOUR SELECTION**:
+   - Read the text content between your start and end times
+   - Make ABSOLUTELY SURE the text matches what you're outputting
+   - If start=52.960 and end=84.0, the text MUST be exactly what's spoken from 52.960s to 84.0s
+   - NO GUESSING, NO APPROXIMATING
+
+📊 WORD-LEVEL TIMING:
+
+- Break down the combined text into individual words
+- Estimate word timing proportionally based on subtitle line durations
+- Each word needs: "word" (text), "start" (seconds), "end" (seconds)
+
+📤 OUTPUT FORMAT:
+
+[
+  {
+    "start_sec": <EXACT start time from subtitle file in seconds>,
+    "end_sec": <EXACT end time from subtitle file in seconds>,
+    "text": "<ALL text from that time range combined>",
+    "words": [
+      {"word": "<word1>", "start": <time>, "end": <time>},
+      {"word": "<word2>", "start": <time>, "end": <time>},
+      ... (all words from the entire segment)
+    ]
+  }
+]
+
+⚠️ FINAL WARNING:
+If the text in your output does NOT match the actual spoken content at those timestamps, the video will be BROKEN.
+DOUBLE-CHECK your timestamps before outputting!
+
+🎬 NOW: Output ONE JSON object with EXACT timing for ONE continuous 30-60 second segment that tells a COMPLETE STORY:"""
+    
     # Create the content parts
     parts = [
         types.Part.from_text(text=subtitle_content),
